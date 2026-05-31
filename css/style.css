@@ -1,6 +1,7 @@
 @charset "utf-8";
 #sbtn li{
     cursor: pointer;
+    width: max-content;
 }
 #sbtn li::marker{
     cursor: auto;
