@@ -3,11 +3,11 @@ window.addEventListener('DOMContentLoaded', () => {
     const seasonButtons = document.querySelectorAll('#sbtn li');
     
     let fileIndex = 1;
-    let currentSeason = ""; // 초기값은 비워두고 자동으로 최신 시즌을 찾습니다.
-    let isClickBlocked = false; // 이미지 로딩 중 중복 클릭 방지용 플래그
+    let currentSeason = ""; // 자동으로 최신 시즌을 찾습니다.
 
     // [핵심 기능] 이미지를 순서대로 불러오는 함수
     async function loadNextImage(season) {
+        // [검증 1] 이미지를 요청하기 전에 사용자가 다른 시즌 버튼을 눌렀다면 즉시 중단(폭파)
         if (season !== currentSeason) return;
 
         const imgUrl = `img/${currentSeason}/${fileIndex}.webp`;
@@ -19,6 +19,7 @@ window.addEventListener('DOMContentLoaded', () => {
                 throw new Error('NOT_FOUND');
             }
 
+            // [검증 2] 서버 응답을 기다리는 사이(await) 다른 시즌으로 바꼈는지 다시 검사
             if (season !== currentSeason) return;
 
             const lastModified = response.headers.get('Last-Modified');
@@ -41,31 +42,40 @@ window.addEventListener('DOMContentLoaded', () => {
             img.alt = dateString;
 
             img.onload = function() {
+                // [검증 3] 이미지 로딩이 완료된 시점에도 최종 확인 후 화면에 삽입
                 if (season === currentSeason) {
                     photosContainer.appendChild(img);
                     fileIndex++;
-                    loadNextImage(season);
+                    loadNextImage(season); // 다음 이미지 호출
                 }
             };
 
         } catch (err) {
-            console.log(`%c[시즌 ${season}] 총 ${fileIndex - 1}개의 이미지를 전부 불러왔습니다.`, 'color: #00fa9a; font-weight: bold;');
-            isClickBlocked = false;
+            // 더 이상 이미지가 없어서 멈춘 정상적인 상황이거나, 다른 시즌 버튼을 눌러 예외 처리가 된 경우
+            if (season === currentSeason) {
+                printStatusMessage(season, fileIndex - 1);
+            }
         }
+    }
+
+    // 콘솔 로그 출력용 함수 분리
+    function printStatusMessage(season, totalCount) {
+        console.log(`%c[시즌 ${season}] 총 ${totalCount}개의 이미지를 전부 불러왔습니다.`, 'color: #00fa9a; font-weight: bold;');
     }
 
     // [시즌 변경 및 클래스 토글] 
     function changeSeason(targetSeason, targetButton) {
         currentSeason = targetSeason;
         fileIndex = 1;
-        photosContainer.innerHTML = '';
+        photosContainer.innerHTML = ''; // 화면 즉시 비우기
         
-        // 모든 li에서 on 클래스를 지우고, 클릭된 li에만 on 클래스 추가
+        // 버튼 활성화 클래스 조절
         seasonButtons.forEach(btn => btn.classList.remove('on'));
         if (targetButton) {
             targetButton.classList.add('on');
         }
 
+        // 새 시즌 이미지 로딩 기동
         loadNextImage(currentSeason);
     }
 
@@ -74,21 +84,19 @@ window.addEventListener('DOMContentLoaded', () => {
         button.addEventListener('click', () => {
             const selectedSeason = button.textContent.trim();
             
-            if (selectedSeason === currentSeason && photosContainer.children.length > 0) return;
-            if (isClickBlocked) return; 
+            // 현재 이미 보고 있는 시즌을 또 누른 경우는 무시합니다.
+            if (selectedSeason === currentSeason) return;
 
-            isClickBlocked = true;
+            // 로딩 중이든 아니든 상관없이 즉시 해당 시즌으로 교체 처리를 갈겨버립니다.
             changeSeason(selectedSeason, button);
         });
     });
 
-    // [최신 시즌 자동 실행] 
-    // #sbtn li 중 가장 마지막(가장 밑에 있는) 요소를 찾아 기본값으로 실행합니다.
+    // [최신 시즌 자동 실행] 맨 마지막 li 요소를 찾아 기본값으로 실행
     if (seasonButtons.length > 0) {
-        const latestButton = seasonButtons[seasonButtons.length - 1]; // 맨 마지막 li 선택
+        const latestButton = seasonButtons[seasonButtons.length - 1]; 
         const latestSeason = latestButton.textContent.trim();
         
-        isClickBlocked = true;
         changeSeason(latestSeason, latestButton);
     }
 });
