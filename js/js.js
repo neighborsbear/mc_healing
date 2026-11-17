@@ -10,10 +10,18 @@ window.addEventListener('DOMContentLoaded', () => {
     let totalImagesCount = 0; 
     let currentPage = 1;      
     const itemsPerPage = 20;  
-    let loadSequenceId = 0;
+    let loadSequenceId = 0; // 페이지를 빨리 넘길 때 이전 로딩을 무효화하는 ID
     let isBgmEnabled = false; 
 
     const validSeasons = Array.from(seasonButtons).map(btn => btn.textContent.trim());
+
+    // [최적화 1] 각 시즌별 총 사진 개수를 여기에 상수로 지정합니다. (탐색 딜레이 0초)
+    // 사진이 늘어나면 이 숫자만 수정해 주시면 됩니다!
+    const seasonTotalCounts = {
+        "-1": 190,  // 예시: 시즌 -1 총 개수
+        "0": 49,  // 예시: 시즌 0 총 개수
+        "1": 651   // 예시: 시즌 1 총 개수
+    };
 
     function updateVolumeSliderUI() {
         const val = bgmVolumeBar.value;
@@ -65,8 +73,9 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 실제 화면에 보여줄 때만 이미지를 로드 (20장만)
+    // [최적화 2] 현재 페이지의 이미지만 우선 로드 + 빠르게 넘기면 이전 로딩 즉시 차단
     function renderPhotosForPage(season, page, updateHistory = true) {
+        const currentLoadId = ++loadSequenceId; // 로딩 요청 번호 갱신
         photosContainer.innerHTML = '';
         currentPage = page;
 
@@ -80,6 +89,12 @@ window.addEventListener('DOMContentLoaded', () => {
         for (let i = startIndex; i <= endIndex; i++) {
             const imgUrl = `img/${season}/${i}.webp`;
             const img = document.createElement('img');
+            
+            // 이미지가 로드될 때 현재 페이지의 요청이 맞는지 검사하여, 지나쳐버린 페이지의 로딩은 무시
+            img.onload = function() {
+                if (currentLoadId !== loadSequenceId || season !== currentSeason) return;
+            };
+
             img.src = imgUrl;
             img.alt = `시즌 ${season} 사진 ${i}`;
             photosContainer.appendChild(img);
@@ -140,73 +155,26 @@ window.addEventListener('DOMContentLoaded', () => {
         paginationContainer.appendChild(span);
     }
 
-    // [핵심] 이미지를 화면에 띄우지 않고, 파일 존재 여부만 빠르게 체크해서 총 갯수 파악
-    function checkSeasonTotalImages(season, targetPage = 1, updateHistory = true) {
-        const currentLoadId = ++loadSequenceId;
-
-        // 화면에 그리지 않고 fetch(HEAD)나 빈 Image 객체로 존재 유무만 가볍게 확인
-        function checkExists(index) {
-            return new Promise((resolve) => {
-                const img = new Image();
-                img.src = `img/${season}/${index}.webp`;
-                img.onload = () => resolve(true);
-                img.onerror = () => resolve(false);
-            });
-        }
-
-        async function findCount() {
-            // 1번도 없으면 빈 시즌
-            if (!(await checkExists(1))) {
-                if (season !== currentSeason || currentLoadId !== loadSequenceId) return;
-                totalImagesCount = 0;
-                photosContainer.innerHTML = '<p>등록된 이미지가 없습니다.</p>';
-                paginationContainer.innerHTML = '';
-                return;
-            }
-
-            // 1, 2, 4, 8, 16... 배수 단위로 빠르게 상한선 탐색 (요청 횟수 최소화)
-            let upperBound = 1;
-            while (await checkExists(upperBound * 2)) {
-                if (season !== currentSeason || currentLoadId !== loadSequenceId) return;
-                upperBound *= 2;
-                if (upperBound > 50000) break; 
-            }
-
-            // 찾은 범위 안에서 정확한 마지막 번호 확정 (이진 탐색)
-            let lowerBound = upperBound;
-            upperBound = upperBound * 2;
-            let lastValid = lowerBound;
-
-            while (lowerBound <= upperBound) {
-                if (season !== currentSeason || currentLoadId !== loadSequenceId) return;
-                const mid = Math.floor((lowerBound + upperBound) / 2);
-                if (await checkExists(mid)) {
-                    lastValid = mid;
-                    lowerBound = mid + 1;
-                } else {
-                    upperBound = mid - 1;
-                }
-            }
-
-            if (season !== currentSeason || currentLoadId !== loadSequenceId) return;
-
-            totalImagesCount = lastValid;
-            const maxPages = Math.ceil(totalImagesCount / itemsPerPage);
-            const finalPage = targetPage > maxPages ? maxPages : targetPage;
-
-            // 총 개수 파악 완료 즉시 해당 페이지만 렌더링
-            renderPhotosForPage(season, finalPage, updateHistory);
-        }
-
-        findCount();
-    }
-
-    function changeSeason(targetSeason, targetButton, targetPage = 1, updateHistory = true) {
-        currentSeason = targetSeason;
-        
+    // 탐색 없이 상수로 즉시 개수 설정 후 렌더링
+    function loadSeason(season, targetPage = 1, updateHistory = true) {
+        currentSeason = season;
         photosContainer.innerHTML = '';
         paginationContainer.innerHTML = '';
         
+        totalImagesCount = seasonTotalCounts[season] || 0;
+
+        if (totalImagesCount > 0) {
+            const maxPages = Math.ceil(totalImagesCount / itemsPerPage);
+            const finalPage = targetPage > maxPages ? maxPages : targetPage;
+
+            renderPhotosForPage(season, finalPage, updateHistory);
+        } else {
+            photosContainer.innerHTML = '<p>등록된 이미지가 없습니다.</p>';
+            paginationContainer.innerHTML = '';
+        }
+    }
+
+    function changeSeason(targetSeason, targetButton, targetPage = 1, updateHistory = true) {
         seasonButtons.forEach(btn => btn.classList.remove('on'));
         if (targetButton) {
             targetButton.classList.add('on');
@@ -224,7 +192,7 @@ window.addEventListener('DOMContentLoaded', () => {
             updateBgmButtonUI();
         }
 
-        checkSeasonTotalImages(currentSeason, targetPage, updateHistory);
+        loadSeason(targetSeason, targetPage, updateHistory);
     }
 
     seasonButtons.forEach(button => {
