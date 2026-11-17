@@ -104,13 +104,16 @@ window.addEventListener('DOMContentLoaded', () => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
+    // 화면 크기에 따라 페이지네이션 최대 노출 개수 조절 (PC: 7개, 모바일: 5개)
     function renderPagination(season) {
         paginationContainer.innerHTML = '';
         const totalPages = Math.ceil(totalImagesCount / itemsPerPage);
         
         if (totalPages <= 1) return;
 
-        const maxVisiblePages = 7;
+        // 모바일 화면(600px 이하)에서는 최대 5개, PC에서는 7개 표시
+        const maxVisiblePages = window.innerWidth <= 600 ? 5 : 7;
+        
         let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
         let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
 
@@ -252,4 +255,15 @@ window.addEventListener('DOMContentLoaded', () => {
             changeSeason(defaultSeason, seasonButtons[seasonButtons.length - 1], 1, true);
         }
     }
+
+    // 브라우저 창 크기가 바뀔 때(모바일 토글 포함) 페이지네이션 즉시 재적용
+    let resizeTimer;
+    window.addEventListener('resize', () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+            if (currentSeason) {
+                renderPagination(currentSeason);
+            }
+        }, 150); // 너무 자주 실행되는 것을 방지하기 위한 딜레이
+    });
 });

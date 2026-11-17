@@ -111,7 +111,7 @@ body {
 }
 
 img {
-    /* width: 100%; */
+    max-width: 100%;
     max-height: 92.5vh;
     margin-bottom: 10px;
     border-radius: 8px;
@@ -141,7 +141,8 @@ img {
 }
 
 #pagination button {
-    padding: 6px 12px;
+    min-width: 36px;
+    padding: 6px 6px;
     font-size: 14px;
     font-weight: bold;
     border: 1px solid #ccc;
@@ -159,4 +160,48 @@ img {
     background-color: #2ecc71;
     color: #fff;
     border-color: #27ae60;
+}
+
+/* --- 모바일 반응형 최적화 스타일 --- */
+@media screen and (max-width: 600px) {
+    body {
+        padding: 10px;
+        padding-top: 70px;
+        padding-bottom: 70px;
+    }
+
+    /* 상단 고정 메뉴 크기 및 여백 축소 */
+    #season-menu-box {
+        top: 10px;
+        left: 10px;
+        padding: 6px 10px;
+    }
+
+    #bgm-control-box {
+        top: 10px;
+        right: 10px;
+        width: 95px;
+    }
+
+    #bgm-toggle {
+        padding: 6px 0;
+        font-size: 11px;
+    }
+
+    /* 하단 페이지네이션 버튼 모바일 맞춤 크기 */
+    #pagination {
+        gap: 3px;
+        padding: 4px;
+    }
+
+    #pagination button {
+        min-width: 30px;
+        padding: 5px 4px;
+        font-size: 12px;
+    }
+    
+    #pagination span {
+        padding: 4px 2px !important;
+        font-size: 12px;
+    }
 }
