@@ -42,7 +42,7 @@ window.addEventListener('DOMContentLoaded', () => {
             bgmPlayer.play().then(() => {
                 updateBgmButtonUI();
             }).catch(err => {
-                console.log("오디오 재생 실패:", err); 해시
+                console.log("오디오 재생 실패:", err);
                 isBgmEnabled = false;
                 updateBgmButtonUI();
             });
@@ -58,7 +58,6 @@ window.addEventListener('DOMContentLoaded', () => {
         updateVolumeSliderUI();
     });
 
-    // 해시(#)를 이용해 주소창 업데이트 (Cannot GET 에러 방지)
     function updateHashPath(season, page) {
         const newHash = `#${season}/${page}`;
         if (window.location.hash !== newHash) {
@@ -66,7 +65,7 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 특정 페이지의 이미지 20장만 화면에 렌더링
+    // 실제 화면에 보여줄 때만 이미지를 로드 (20장만)
     function renderPhotosForPage(season, page, updateHistory = true) {
         photosContainer.innerHTML = '';
         currentPage = page;
@@ -79,7 +78,6 @@ window.addEventListener('DOMContentLoaded', () => {
         const endIndex = Math.min(page * itemsPerPage, totalImagesCount);
 
         for (let i = startIndex; i <= endIndex; i++) {
-            // 상대 경로로 정확히 img 폴더 지정
             const imgUrl = `img/${season}/${i}.webp`;
             const img = document.createElement('img');
             img.src = imgUrl;
@@ -91,7 +89,6 @@ window.addEventListener('DOMContentLoaded', () => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    // 7페이지 단위 동적 페이지네이션 생성
     function renderPagination(season) {
         paginationContainer.innerHTML = '';
         const totalPages = Math.ceil(totalImagesCount / itemsPerPage);
@@ -143,42 +140,65 @@ window.addEventListener('DOMContentLoaded', () => {
         paginationContainer.appendChild(span);
     }
 
-    // 총 이미지 개수를 센 뒤 해당 페이지 출력
+    // [핵심] 이미지를 화면에 띄우지 않고, 파일 존재 여부만 빠르게 체크해서 총 갯수 파악
     function checkSeasonTotalImages(season, targetPage = 1, updateHistory = true) {
         const currentLoadId = ++loadSequenceId;
-        let fileIndex = 1;
 
-        function probeNext() {
-            if (season !== currentSeason || currentLoadId !== loadSequenceId) return;
-
-            const imgUrl = `img/${season}/${fileIndex}.webp`;
-            const img = new Image();
-            img.src = imgUrl;
-
-            img.onload = function() {
-                if (season !== currentSeason || currentLoadId !== loadSequenceId) return;
-                fileIndex++;
-                probeNext();
-            };
-
-            img.onerror = function() {
-                if (season !== currentSeason || currentLoadId !== loadSequenceId) return;
-                
-                totalImagesCount = fileIndex - 1;
-                
-                if (totalImagesCount > 0) {
-                    const maxPages = Math.ceil(totalImagesCount / itemsPerPage);
-                    const finalPage = targetPage > maxPages ? maxPages : targetPage;
-
-                    renderPhotosForPage(season, finalPage, updateHistory);
-                } else {
-                    photosContainer.innerHTML = '<p>등록된 이미지가 없습니다.</p>';
-                    paginationContainer.innerHTML = '';
-                }
-            };
+        // 화면에 그리지 않고 fetch(HEAD)나 빈 Image 객체로 존재 유무만 가볍게 확인
+        function checkExists(index) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.src = `img/${season}/${index}.webp`;
+                img.onload = () => resolve(true);
+                img.onerror = () => resolve(false);
+            });
         }
 
-        probeNext();
+        async function findCount() {
+            // 1번도 없으면 빈 시즌
+            if (!(await checkExists(1))) {
+                if (season !== currentSeason || currentLoadId !== loadSequenceId) return;
+                totalImagesCount = 0;
+                photosContainer.innerHTML = '<p>등록된 이미지가 없습니다.</p>';
+                paginationContainer.innerHTML = '';
+                return;
+            }
+
+            // 1, 2, 4, 8, 16... 배수 단위로 빠르게 상한선 탐색 (요청 횟수 최소화)
+            let upperBound = 1;
+            while (await checkExists(upperBound * 2)) {
+                if (season !== currentSeason || currentLoadId !== loadSequenceId) return;
+                upperBound *= 2;
+                if (upperBound > 50000) break; 
+            }
+
+            // 찾은 범위 안에서 정확한 마지막 번호 확정 (이진 탐색)
+            let lowerBound = upperBound;
+            upperBound = upperBound * 2;
+            let lastValid = lowerBound;
+
+            while (lowerBound <= upperBound) {
+                if (season !== currentSeason || currentLoadId !== loadSequenceId) return;
+                const mid = Math.floor((lowerBound + upperBound) / 2);
+                if (await checkExists(mid)) {
+                    lastValid = mid;
+                    lowerBound = mid + 1;
+                } else {
+                    upperBound = mid - 1;
+                }
+            }
+
+            if (season !== currentSeason || currentLoadId !== loadSequenceId) return;
+
+            totalImagesCount = lastValid;
+            const maxPages = Math.ceil(totalImagesCount / itemsPerPage);
+            const finalPage = targetPage > maxPages ? maxPages : targetPage;
+
+            // 총 개수 파악 완료 즉시 해당 페이지만 렌더링
+            renderPhotosForPage(season, finalPage, updateHistory);
+        }
+
+        findCount();
     }
 
     function changeSeason(targetSeason, targetButton, targetPage = 1, updateHistory = true) {
@@ -221,7 +241,6 @@ window.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // 해시 변경 감지 (뒤로가기 / 앞으로가기 및 직접 해시 입력 대응)
     window.addEventListener('hashchange', () => {
         parseHashAndLoad(false);
     });
@@ -257,7 +276,6 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 최초 진입 시 실행
     if (seasonButtons.length > 0) {
         if (window.location.hash) {
             parseHashAndLoad(true);
