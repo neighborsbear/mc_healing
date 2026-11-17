@@ -1,5 +1,13 @@
 @charset "utf-8";
 
+body {
+    margin: 0;
+    padding: 20px;
+    padding-top: 80px;
+    padding-bottom: 80px;
+    text-align: center;
+}
+
 /* 우측 상단 BGM 컨트롤 박스 고정 */
 #bgm-control-box {
     position: fixed;
@@ -14,7 +22,6 @@
 
 #bgm-toggle {
     width: 100%;
-    margin: 2px;
     padding: 8px 0;
     font-size: 13px;
     font-weight: bold;
@@ -33,7 +40,6 @@
     border-color: #27ae60;
 }
 
-/* 슬라이드바 버튼 크기에 맞추기 (초기 50% 채움) */
 #bgm-volume {
     width: 100%;
     height: 6px;
@@ -62,20 +68,95 @@
     cursor: pointer;
 }
 
+/* 좌측 상단 고정 시즌 메뉴 스타일 */
+#season-menu-box {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    z-index: 1000;
+    background: rgba(255, 255, 255, 0.95);
+    padding: 10px 15px;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    text-align: left;
+}
+
+#season-menu-box h2 {
+    margin: 0 0 5px 0;
+    font-size: 14px;
+}
+
+#sbtn {
+    margin: 0;
+    padding-left: 20px;
+}
+
 #sbtn li {
     cursor: pointer;
     width: max-content;
-}
-
-#sbtn li::marker {
-    cursor: auto;
+    list-style-type: disc;
 }
 
 #sbtn li.on {
     font-weight: bold;
     text-decoration: underline;
+    color: #2ecc71;
+}
+
+/* 사진 컨테이너 */
+.photos {
+    /* max-width: 800px; */
+    margin: 20px auto;
 }
 
 img {
+    /* width: 100%; */
+    max-height: 92.5vh;
+    margin-bottom: 10px;
+    border-radius: 8px;
+}
+
+/* [수정] 하단 중앙 고정 페이지네이션 영역 스타일 */
+#pagination-container {
+    position: fixed;
+    bottom: 0;
+    left: 0;
     width: 100%;
+    padding: 12px 0;
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+}
+
+#pagination {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 900px;
+    background: #ffffff50;
+    padding: 6px;
+    border-radius: 6px;
+}
+
+#pagination button {
+    padding: 6px 12px;
+    font-size: 14px;
+    font-weight: bold;
+    border: 1px solid #ccc;
+    background-color: #fff;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+#pagination button:hover {
+    background-color: #f0f0f0;
+}
+
+#pagination button.active {
+    background-color: #2ecc71;
+    color: #fff;
+    border-color: #27ae60;
 }

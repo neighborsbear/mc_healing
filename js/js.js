@@ -1,29 +1,31 @@
 window.addEventListener('DOMContentLoaded', () => {
     const photosContainer = document.querySelector('.photos');
     const seasonButtons = document.querySelectorAll('#sbtn li');
+    const paginationContainer = document.getElementById('pagination');
     const bgmPlayer = document.getElementById('bgm');
     const bgmToggleBtn = document.getElementById('bgm-toggle');
     const bgmVolumeBar = document.getElementById('bgm-volume');
     
     let currentSeason = ""; 
+    let totalImagesCount = 0; 
+    let currentPage = 1;      
+    const itemsPerPage = 20;  
     let loadSequenceId = 0;
-    let isBgmEnabled = false; // 초기 상태는 꺼짐
+    let isBgmEnabled = false; 
 
-    // 슬라이드바 왼쪽 채움 색상(#2ecc71) 업데이트 함수
+    const validSeasons = Array.from(seasonButtons).map(btn => btn.textContent.trim());
+
     function updateVolumeSliderUI() {
         const val = bgmVolumeBar.value;
         const min = bgmVolumeBar.min || 0;
         const max = bgmVolumeBar.max || 1;
         const percentage = ((val - min) / (max - min)) * 100;
-        
         bgmVolumeBar.style.background = `linear-gradient(to right, #2ecc71 ${percentage}%, #bdffd9 ${percentage}%)`;
     }
 
-    // 초기 볼륨 및 슬라이드바 색상 반영
     bgmPlayer.volume = bgmVolumeBar.value;
     updateVolumeSliderUI();
 
-    // BGM 버튼 UI 업데이트 함수
     function updateBgmButtonUI() {
         if (isBgmEnabled && !bgmPlayer.paused) {
             bgmToggleBtn.textContent = '🔊 BGM ON';
@@ -34,14 +36,13 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 우측 상단 BGM 버튼 클릭 이벤트
     bgmToggleBtn.addEventListener('click', () => {
         if (!isBgmEnabled) {
             isBgmEnabled = true;
             bgmPlayer.play().then(() => {
                 updateBgmButtonUI();
             }).catch(err => {
-                console.log("오디오 재생 실패 (파일 경로 확인 필요):", err);
+                console.log("오디오 재생 실패:", err); 해시
                 isBgmEnabled = false;
                 updateBgmButtonUI();
             });
@@ -52,65 +53,145 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // 볼륨 슬라이드바 조절 이벤트
     bgmVolumeBar.addEventListener('input', (e) => {
         bgmPlayer.volume = e.target.value;
-        updateVolumeSliderUI(); // 드래그할 때마다 왼쪽 색상 영역 갱신
+        updateVolumeSliderUI();
     });
 
-    // 이미지를 순차적으로 불러오는 함수
-    function loadImagesForSeason(season) {
+    // 해시(#)를 이용해 주소창 업데이트 (Cannot GET 에러 방지)
+    function updateHashPath(season, page) {
+        const newHash = `#${season}/${page}`;
+        if (window.location.hash !== newHash) {
+            window.location.hash = newHash;
+        }
+    }
+
+    // 특정 페이지의 이미지 20장만 화면에 렌더링
+    function renderPhotosForPage(season, page, updateHistory = true) {
+        photosContainer.innerHTML = '';
+        currentPage = page;
+
+        if (updateHistory) {
+            updateHashPath(season, currentPage);
+        }
+
+        const startIndex = (page - 1) * itemsPerPage + 1;
+        const endIndex = Math.min(page * itemsPerPage, totalImagesCount);
+
+        for (let i = startIndex; i <= endIndex; i++) {
+            // 상대 경로로 정확히 img 폴더 지정
+            const imgUrl = `img/${season}/${i}.webp`;
+            const img = document.createElement('img');
+            img.src = imgUrl;
+            img.alt = `시즌 ${season} 사진 ${i}`;
+            photosContainer.appendChild(img);
+        }
+
+        renderPagination(season);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // 7페이지 단위 동적 페이지네이션 생성
+    function renderPagination(season) {
+        paginationContainer.innerHTML = '';
+        const totalPages = Math.ceil(totalImagesCount / itemsPerPage);
+        
+        if (totalPages <= 1) return;
+
+        const maxVisiblePages = 7;
+        let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+        let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+        if (endPage - startPage + 1 < maxVisiblePages) {
+            startPage = Math.max(1, endPage - maxVisiblePages + 1);
+        }
+
+        if (startPage > 1) {
+            addPageButton(1, season);
+            if (startPage > 2) addEllipsis();
+        }
+
+        for (let i = startPage; i <= endPage; i++) {
+            addPageButton(i, season);
+        }
+
+        if (endPage < totalPages) {
+            if (endPage < totalPages - 1) addEllipsis();
+            addPageButton(totalPages, season);
+        }
+    }
+
+    function addPageButton(pageNum, season) {
+        const btn = document.createElement('button');
+        btn.textContent = pageNum;
+        if (pageNum === currentPage) {
+            btn.classList.add('active');
+        }
+        btn.addEventListener('click', () => {
+            if (pageNum !== currentPage) {
+                renderPhotosForPage(season, pageNum, true);
+            }
+        });
+        paginationContainer.appendChild(btn);
+    }
+
+    function addEllipsis() {
+        const span = document.createElement('span');
+        span.textContent = '...';
+        span.style.padding = '6px 8px';
+        span.style.alignSelf = 'center';
+        paginationContainer.appendChild(span);
+    }
+
+    // 총 이미지 개수를 센 뒤 해당 페이지 출력
+    function checkSeasonTotalImages(season, targetPage = 1, updateHistory = true) {
         const currentLoadId = ++loadSequenceId;
         let fileIndex = 1;
-        const maxConsecutiveErrors = 3;
-        let consecutiveErrors = 0;
 
-        function tryNext() {
+        function probeNext() {
             if (season !== currentSeason || currentLoadId !== loadSequenceId) return;
 
             const imgUrl = `img/${season}/${fileIndex}.webp`;
-            const img = document.createElement('img');
-            
+            const img = new Image();
             img.src = imgUrl;
-            img.alt = `시즌 ${season} 사진 ${fileIndex}`;
 
             img.onload = function() {
                 if (season !== currentSeason || currentLoadId !== loadSequenceId) return;
-                
-                photosContainer.appendChild(img);
-                consecutiveErrors = 0;
                 fileIndex++;
-                tryNext();
+                probeNext();
             };
 
             img.onerror = function() {
                 if (season !== currentSeason || currentLoadId !== loadSequenceId) return;
                 
-                consecutiveErrors++;
-                fileIndex++;
+                totalImagesCount = fileIndex - 1;
                 
-                if (consecutiveErrors <= maxConsecutiveErrors) {
-                    tryNext(); 
+                if (totalImagesCount > 0) {
+                    const maxPages = Math.ceil(totalImagesCount / itemsPerPage);
+                    const finalPage = targetPage > maxPages ? maxPages : targetPage;
+
+                    renderPhotosForPage(season, finalPage, updateHistory);
                 } else {
-                    console.log(`%c[시즌 ${season}] 이미지 로딩이 완료되었습니다.`, 'color: #00fa9a; font-weight: bold;');
+                    photosContainer.innerHTML = '<p>등록된 이미지가 없습니다.</p>';
+                    paginationContainer.innerHTML = '';
                 }
             };
         }
 
-        tryNext();
+        probeNext();
     }
 
-    // 시즌 변경 및 BGM / 클래스 토글
-    function changeSeason(targetSeason, targetButton) {
+    function changeSeason(targetSeason, targetButton, targetPage = 1, updateHistory = true) {
         currentSeason = targetSeason;
+        
         photosContainer.innerHTML = '';
+        paginationContainer.innerHTML = '';
         
         seasonButtons.forEach(btn => btn.classList.remove('on'));
         if (targetButton) {
             targetButton.classList.add('on');
         }
 
-        // 시즌별 BGM 파일 경로 지정 (-1.mp3, 0.mp3, 1.mp3 ...)
         bgmPlayer.src = `audio/${targetSeason}.mp3`;
 
         if (isBgmEnabled) {
@@ -123,22 +204,66 @@ window.addEventListener('DOMContentLoaded', () => {
             updateBgmButtonUI();
         }
 
-        loadImagesForSeason(currentSeason);
+        checkSeasonTotalImages(currentSeason, targetPage, updateHistory);
     }
 
-    // 시즌 버튼 클릭 이벤트 바인딩
     seasonButtons.forEach(button => {
         button.addEventListener('click', () => {
             const selectedSeason = button.textContent.trim();
             if (selectedSeason === currentSeason) return;
-            changeSeason(selectedSeason, button);
+
+            let targetBtn = button;
+            seasonButtons.forEach(b => {
+                if (b.textContent.trim() === selectedSeason) targetBtn = b;
+            });
+
+            changeSeason(selectedSeason, targetBtn, 1, true);
         });
     });
 
-    // 최신 시즌 자동 실행
+    // 해시 변경 감지 (뒤로가기 / 앞으로가기 및 직접 해시 입력 대응)
+    window.addEventListener('hashchange', () => {
+        parseHashAndLoad(false);
+    });
+
+    function parseHashAndLoad(updateHistory = false) {
+        const hash = window.location.hash.replace('#', '');
+        const parts = hash.split('/');
+        
+        let seasonToLoad = "";
+        let pageToLoad = 1;
+
+        if (parts.length >= 2 && validSeasons.includes(parts[0]) && !isNaN(parts[1])) {
+            seasonToLoad = parts[0];
+            pageToLoad = parseInt(parts[1], 10);
+        }
+
+        if (!seasonToLoad) {
+            seasonToLoad = validSeasons[validSeasons.length - 1];
+            pageToLoad = 1;
+        }
+
+        let targetBtn = null;
+        seasonButtons.forEach(btn => {
+            if (btn.textContent.trim() === seasonToLoad) {
+                targetBtn = btn;
+            }
+        });
+
+        if (seasonToLoad !== currentSeason) {
+            changeSeason(seasonToLoad, targetBtn, pageToLoad, updateHistory);
+        } else if (pageToLoad !== currentPage) {
+            renderPhotosForPage(seasonToLoad, pageToLoad, updateHistory);
+        }
+    }
+
+    // 최초 진입 시 실행
     if (seasonButtons.length > 0) {
-        const latestButton = seasonButtons[seasonButtons.length - 1]; 
-        const latestSeason = latestButton.textContent.trim();
-        changeSeason(latestSeason, latestButton);
+        if (window.location.hash) {
+            parseHashAndLoad(true);
+        } else {
+            const defaultSeason = validSeasons[validSeasons.length - 1];
+            changeSeason(defaultSeason, seasonButtons[seasonButtons.length - 1], 1, true);
+        }
     }
 });
